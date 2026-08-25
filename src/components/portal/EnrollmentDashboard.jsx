@@ -1,0 +1,116 @@
+import { useState } from 'react';
+import { useLeads } from '../../lib/LeadsContext.jsx';
+import { STAGES, TRAINING_DURATIONS, TRAINING_PROGRAMS, isFullyPaid } from '../../lib/config.js';
+import { Donut, LineChart } from './Charts.jsx';
+
+export default function EnrollmentDashboard() {
+  const { leads: allLeads, loading, connected } = useLeads();
+  const [year, setYear] = useState('2027');
+  const [durFilter, setDurFilter] = useState('all');
+  if (loading) return <div className="panel-loading">Loading…</div>;
+
+  // Filter by academic year (via training duration containing the year) + specific duration
+  const leads = allLeads.filter((l) => {
+    if (durFilter !== 'all') return l.training_duration === durFilter;
+    if (year && l.training_duration) return l.training_duration.includes(year);
+    return true;
+  });
+
+  const total = leads.length;
+  const paid = leads.filter(isFullyPaid).length;
+  const admitted = leads.filter((l) => l.stage === 'Admitted' || l.stage === 'Paid').length;
+  const conversion = total ? ((paid / total) * 100).toFixed(1) : '0.0';
+
+  // Lead sources
+  const sources = {};
+  leads.forEach((l) => { const s = l.source || 'direct'; sources[s] = (sources[s] || 0) + 1; });
+  const sourceRows = Object.entries(sources).sort((a, b) => b[1] - a[1]);
+  const sourceMax = Math.max(1, ...sourceRows.map((r) => r[1]));
+
+  // Stage summary
+  const stageCounts = STAGES.map((s) => ({ stage: s, n: leads.filter((l) => l.stage === s).length }));
+  const stageMax = Math.max(1, ...stageCounts.map((s) => s.n));
+
+  // Enrollment per training duration (count leads at Admitted/Paid)
+  const perDuration = TRAINING_DURATIONS.map((d) => ({
+    d,
+    n: leads.filter((l) => l.training_duration === d && (l.stage === 'Admitted' || l.stage === 'Paid')).length,
+  }));
+  const durMax = Math.max(1, ...perDuration.map((x) => x.n));
+
+  // Program popularity
+  const progCounts = {};
+  leads.forEach((l) => (l.programs || []).forEach((p) => { progCounts[p] = (progCounts[p] || 0) + 1; }));
+  const progRows = TRAINING_PROGRAMS.map((p) => ({ p, n: progCounts[p] || 0 })).sort((a, b) => b.n - a.n);
+  const progMax = Math.max(1, ...progRows.map((r) => r.n));
+
+  return (
+    <div>
+      {!connected && <div className="notice">Preview mode — showing sample data. Connect Supabase to see live enrollments.</div>}
+
+      <div className="filter-bar">
+        <div className="filter-group">
+          <label>Academic Year</label>
+          <select className="portal-field sm" value={year} onChange={(e) => { setYear(e.target.value); setDurFilter('all'); }}>
+            <option value="2027">AY 2027</option>
+          </select>
+        </div>
+        <div className="filter-group">
+          <label>Training Duration</label>
+          <select className="portal-field sm" value={durFilter} onChange={(e) => setDurFilter(e.target.value)}>
+            <option value="all">All durations</option>
+            {TRAINING_DURATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="filter-scope">{durFilter === 'all' ? `All Durations · AY ${year}` : durFilter.replace(', 2027', '').replace(' – ', '–')}</div>
+      </div>
+
+      <div className="kpi-grid">
+        <div className="kpi-card"><div className="kpi-value">{total}</div><div className="kpi-label">Total Leads</div></div>
+        <div className="kpi-card"><div className="kpi-value">{admitted}</div><div className="kpi-label">Admitted + Paid</div></div>
+        <div className="kpi-card"><div className="kpi-value">{paid}</div><div className="kpi-label">Fully Paid</div></div>
+        <div className="kpi-card"><div className="kpi-value">{conversion}%</div><div className="kpi-label">Conversion Rate</div></div>
+      </div>
+
+      <div className="dash-2col">
+        <div className="panel">
+          <h3>Lead Sources</h3>
+          <Donut size={150} thickness={26} data={sourceRows.map(([s, n], i) => ({ label: s, value: n, color: ['#00264d','#b8860b','#1b4f7a','#27795b','#d4a94a','#7a5c1b'][i % 6] }))} />
+        </div>
+
+        <div className="panel">
+          <h3>CRM Summary (by stage)</h3>
+          <div className="bar-chart">
+            {stageCounts.map((s) => (
+              <div className="bar-row" key={s.stage}>
+                <div className="bar-label">{s.stage}</div>
+                <div className="bar-track"><div className="bar-fill" style={{ width: `${(s.n / stageMax) * 100}%` }} /></div>
+                <div className="bar-count">{s.n}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>Total Enrollment per Training Duration</h3>
+        <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>Counts leads at Admitted or Paid for each 2027 duration.</p>
+        <LineChart money={false} height={170} color="var(--navy)" fill="rgba(0,38,77,0.08)"
+          points={perDuration.map((x) => ({ label: x.d.replace(', 2027','').split(' – ')[0].replace(/ \d+$/,''), value: x.n }))} />
+      </div>
+
+      <div className="panel">
+        <h3>Program Popularity</h3>
+        <div className="bar-chart">
+          {progRows.map((r) => (
+            <div className="bar-row" key={r.p}>
+              <div className="bar-label bar-label-wide">{r.p}</div>
+              <div className="bar-track"><div className="bar-fill" style={{ width: `${(r.n / progMax) * 100}%` }} /></div>
+              <div className="bar-count">{r.n}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
