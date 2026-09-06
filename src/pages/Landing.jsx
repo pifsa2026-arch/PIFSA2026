@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/landing.css';
 import { COURSES, PROCESS_STEPS, GALLERY, HERO_PILLS, ABOUT_STATS } from './landingData.js';
 import { TRAINING_DURATIONS, TRAINING_PROGRAMS, ADMISSION_REQUIREMENTS, HOW_TO_JOIN } from '../lib/config.js';
+import { EventsProvider, useEvents } from '../lib/EventsContext.jsx';
 import StatNumber from '../components/StatNumber.jsx';
 import { useCompass } from '../components/useCompass.js';
 import EnrollForm from '../components/EnrollForm.jsx';
@@ -11,9 +12,33 @@ const NAV = ['about', 'calendar', 'courses', 'gallery', 'process', 'contact'];
 const CIRC = 2820;
 
 export default function Landing() {
+  return (
+    <EventsProvider>
+      <LandingInner />
+    </EventsProvider>
+  );
+}
+
+function LandingInner() {
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { displayDurations, displayFeatured } = useEvents();
   const { wrapRef, active, goToStep } = useCompass(PROCESS_STEPS.length);
+  const [slide, setSlide] = useState(0);
+
+  const FE_THEMES = ['fe-navy', 'fe-teal', 'fe-maroon'];
+
+  // Auto-advance the featured slideshow (only when more than one)
+  useEffect(() => {
+    if (displayFeatured.length <= 1) return;
+    const t = setInterval(() => setSlide((s) => (s + 1) % displayFeatured.length), 6000);
+    return () => clearInterval(t);
+  }, [displayFeatured.length]);
+
+  // Keep slide index in range if the list changes
+  useEffect(() => {
+    if (slide >= displayFeatured.length) setSlide(0);
+  }, [displayFeatured.length, slide]);
 
   const go = (id) => {
     setMenuOpen(false);
@@ -152,12 +177,12 @@ export default function Landing() {
             <div className="cal-col">
               <h3 className="cal-col-title">Training Duration</h3>
               <div className="cal-durations">
-                {TRAINING_DURATIONS.map((d, i) => (
-                  <div className="cal-duration" key={d}>
+                {displayDurations.map((d, i) => (
+                  <div className="cal-duration" key={d.id || i}>
                     <div className="cal-badge">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
                     </div>
-                    <div className="cal-duration-text">{d}</div>
+                    <div className="cal-duration-text">{d.date_range || d.title}</div>
                   </div>
                 ))}
               </div>
@@ -175,32 +200,56 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Featured event */}
-          <div className="featured-event">
-            <div className="fe-badge">Featured · Now Open</div>
-            <div className="fe-body">
-              <div className="fe-main">
-                <h3>Professional Certificate in Forensic Accounting and Investigation</h3>
-                <div className="fe-class">PCFAI Class 2026-01</div>
-                <p className="fe-desc">40 days (240 training hours) of hybrid learning — modular distance study, seven Saturday online sessions, and a 3-day face-to-face capstone with investigative interviewing, practice court, and graduation.</p>
-                <div className="fe-meta">
-                  <div className="fe-meta-item"><span className="fe-meta-label">Duration</span>Aug 29 – Oct 17, 2026</div>
-                  <div className="fe-meta-item"><span className="fe-meta-label">Modality</span>Hybrid / Blended</div>
-                  <div className="fe-meta-item"><span className="fe-meta-label">Saturdays</span>8:30 AM – 5:00 PM</div>
-                  <div className="fe-meta-item"><span className="fe-meta-label">Face-to-face</span>Oct 15 – 17, 2026 · Manila</div>
-                </div>
-                <p className="fe-who"><strong>Who may join:</strong> Graduates of Law, Accountancy, Business Administration, Financial Management, Criminology, and Forensic Science.</p>
-              </div>
-              <div className="fe-side">
-                <div className="fe-fee-label">Registration Fee</div>
-                <div className="fe-fee">₱25,000</div>
-                <div className="fe-fee-note">Payable in full or installments</div>
-                <div className="fe-dp"><span>Down payment</span><strong>₱5,000</strong></div>
-                <div className="fe-dp"><span>Balance</span><strong>₱20,000</strong></div>
-                <button className="fe-cta" onClick={() => go('contact')}>Register Now</button>
-                <div className="fe-deadline">Deadline: 7:00 PM · Aug 28, 2026</div>
-              </div>
+          {/* Featured event slideshow */}
+          <div className="fe-slideshow">
+            <div className="fe-track" style={{ transform: `translateX(-${slide * 100}%)` }}>
+              {displayFeatured.map((fe, idx) => {
+                const d = fe.details || {};
+                const theme = FE_THEMES[idx % FE_THEMES.length];
+                return (
+                  <div className="fe-slide" key={fe.id}>
+                    <div className={'featured-event ' + theme}>
+                      <div className="fe-badge">Featured · Now Open</div>
+                      <div className="fe-body">
+                        <div className="fe-main">
+                          <h3>{fe.title}</h3>
+                          {d.class && <div className="fe-class">{d.class}</div>}
+                          {d.description && <p className="fe-desc">{d.description}</p>}
+                          <div className="fe-meta">
+                            {fe.date_range && <div className="fe-meta-item"><span className="fe-meta-label">Duration</span>{fe.date_range}</div>}
+                            {d.modality && <div className="fe-meta-item"><span className="fe-meta-label">Modality</span>{d.modality}</div>}
+                            {d.saturdays && <div className="fe-meta-item"><span className="fe-meta-label">Saturdays</span>{d.saturdays}</div>}
+                            {d.facetoface && <div className="fe-meta-item"><span className="fe-meta-label">Face-to-face</span>{d.facetoface}</div>}
+                          </div>
+                          {d.who && <p className="fe-who"><strong>Who may join:</strong> {d.who}</p>}
+                        </div>
+                        <div className="fe-side">
+                          <div className="fe-fee-label">Registration Fee</div>
+                          <div className="fe-fee">₱{d.fee || '25,000'}</div>
+                          <div className="fe-fee-note">Payable in full or installments</div>
+                          {d.deposit && <div className="fe-dp"><span>Down payment</span><strong>₱{d.deposit}</strong></div>}
+                          {d.balance && <div className="fe-dp"><span>Balance</span><strong>₱{d.balance}</strong></div>}
+                          <button className="fe-cta" onClick={() => go('contact')}>Register Now</button>
+                          {d.deadline && <div className="fe-deadline">Deadline: {d.deadline}</div>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+
+            {displayFeatured.length > 1 && (
+              <>
+                <button className="fe-arrow fe-arrow-left" onClick={() => setSlide((s) => (s - 1 + displayFeatured.length) % displayFeatured.length)} aria-label="Previous">‹</button>
+                <button className="fe-arrow fe-arrow-right" onClick={() => setSlide((s) => (s + 1) % displayFeatured.length)} aria-label="Next">›</button>
+                <div className="fe-dots">
+                  {displayFeatured.map((_, i) => (
+                    <button key={i} className={'fe-dot' + (i === slide ? ' active' : '')} onClick={() => setSlide(i)} aria-label={`Slide ${i + 1}`} />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <p className="cal-foot">Each program is ₱25,000. Ready to enroll? <a onClick={() => go('contact')} className="cal-link">Get started →</a></p>
