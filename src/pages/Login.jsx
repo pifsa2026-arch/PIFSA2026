@@ -12,7 +12,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  if (user) { navigate('/portal'); }
+  if (user) { navigate('/workspace'); }
 
   const submit = async () => {
     setError('');
@@ -24,7 +24,7 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) { setError(error.message); return; }
-    navigate('/portal');
+    navigate('/workspace');
   };
 
   return (
