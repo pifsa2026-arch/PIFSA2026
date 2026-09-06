@@ -7,7 +7,7 @@ import RevenueDashboard from '../components/portal/RevenueDashboard.jsx';
 import CRMDashboard from '../components/portal/CRMDashboard.jsx';
 import AutomationDashboard from '../components/portal/AutomationDashboard.jsx';
 import { LeadsProvider, useLeads } from '../lib/LeadsContext.jsx';
-import { STAGES, isFullyPaid } from '../lib/config.js';
+import { STAGES, TRAINING_DURATIONS, isFullyPaid } from '../lib/config.js';
 
 const TABS = [
   { id: 'enrollment', label: 'Enrollment Dashboard', icon: '\u25A6' },
@@ -21,6 +21,8 @@ const STAGE_COLORS = { Leads: '#5b8def', Applicants: '#b8860b', Examinees: '#7a5
 function PortalInner() {
   const [tab, setTab] = useState('enrollment');
   const [navOpen, setNavOpen] = useState(false);
+  const [ovYear, setOvYear] = useState('2027');
+  const [ovDur, setOvDur] = useState('all');
   const [crmStageFilter, setCrmStageFilter] = useState(null);
   const { user, signOut } = useAuth();
   const { leads } = useLeads();
@@ -28,9 +30,14 @@ function PortalInner() {
 
   const logout = async () => { await signOut(); navigate('/'); };
 
-  const stageCounts = STAGES.reduce((a, s) => { a[s] = leads.filter((l) => l.stage === s).length; return a; }, {});
-  const totalLeads = leads.length;
-  const fullyPaid = leads.filter(isFullyPaid).length;
+  const ovLeads = leads.filter((l) => {
+    if (ovDur !== 'all') return l.training_duration === ovDur;
+    if (ovYear && l.training_duration) return l.training_duration.includes(ovYear);
+    return true;
+  });
+  const stageCounts = STAGES.reduce((a, s) => { a[s] = ovLeads.filter((l) => l.stage === s).length; return a; }, {});
+  const totalLeads = ovLeads.length;
+  const fullyPaid = ovLeads.filter(isFullyPaid).length;
 
   const goStage = (stage) => { setCrmStageFilter(stage); setTab('crm'); setNavOpen(false); };
 
@@ -49,7 +56,7 @@ function PortalInner() {
           <nav className="portal-nav">
             {TABS.map((t) => (
               <button key={t.id} className={'portal-nav-item' + (tab === t.id ? ' active' : '')}
-                onClick={() => { setTab(t.id); setNavOpen(false); }}>
+                onClick={() => { setTab(t.id); setNavOpen(false); if (t.id === 'crm') setCrmStageFilter(null); }}>
                 <span className="portal-nav-icon">{t.icon}</span>{t.label}
               </button>
             ))}
@@ -70,6 +77,10 @@ function PortalInner() {
           {/* OVERVIEW */}
           <div className="side-section-label">Overview</div>
           <div className="overview-box">
+            <select className="ov-filter" value={ovDur} onChange={(e) => setOvDur(e.target.value)}>
+              <option value="all">All durations · {ovYear}</option>
+              {TRAINING_DURATIONS.map((d) => <option key={d} value={d}>{d.replace(', 2027', '').replace(' – ', '–')}</option>)}
+            </select>
             <div className="ov-row"><span>Total leads</span><strong>{totalLeads}</strong></div>
             <div className="ov-row"><span>Fully paid</span><strong className="ov-paid">{fullyPaid}</strong></div>
             <div className="ov-bar"><div className="ov-bar-fill" style={{ width: `${totalLeads ? (fullyPaid / totalLeads) * 100 : 0}%` }} /></div>
@@ -88,6 +99,7 @@ function PortalInner() {
           <button className="portal-hamburger" onClick={() => setNavOpen((v) => !v)} aria-label="Menu">
             <span></span><span></span><span></span>
           </button>
+          <button className="portal-back" onClick={() => navigate('/workspace')}>‹ Workspace</button>
           <h1>{TABS.find((t) => t.id === tab)?.label}</h1>
         </header>
         <div className="portal-content">
